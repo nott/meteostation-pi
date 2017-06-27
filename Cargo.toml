@@ -1,0 +1,4 @@
+[package]
+name = "meteostation-pi"
+version = "0.1.0"
+authors = ["Stas Rudakou <stas@garage22.net>"]
