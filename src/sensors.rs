@@ -27,8 +27,23 @@ impl AsyncDhtSensor {
 
         let observation_bg = observation.clone();
         let (tx, rx) = mpsc::channel::<AsyncDhtSensorCommand>();
-        let handle = thread::spawn(move || loop {
-            let mut observation_mut = observation_bg.write().unwrap();
+        let handle = thread::spawn(move || Self::read_loop(observation_bg, pin, rx));
+
+        AsyncDhtSensor {
+            observation: observation,
+            pin: pin,
+            handle: Some(handle),
+            handle_tx: Mutex::new(tx),
+        }
+    }
+
+    fn read_loop(
+        observation: Arc<RwLock<Observation>>,
+        pin: u8,
+        control_channel: mpsc::Receiver<AsyncDhtSensorCommand>,
+    ) {
+        loop {
+            let mut observation_mut = observation.write().unwrap();
             match dht22_pi::read(pin) {
                 Result::Ok(reading) => {
                     (*observation_mut).add_data(DataValue::from_reading(&reading));
@@ -37,17 +52,10 @@ impl AsyncDhtSensor {
                     (*observation_mut).add_error(DataErrorKind::from_error(&error));
                 }
             }
-            match rx.recv_timeout(time::Duration::from_secs(10)) {
+            match control_channel.recv_timeout(time::Duration::from_secs(10)) {
                 Result::Ok(_) => return,
                 Result::Err(_) => (),
             }
-        });
-
-        AsyncDhtSensor {
-            observation: observation,
-            pin: pin,
-            handle: Some(handle),
-            handle_tx: Mutex::new(tx),
         }
     }
 }
