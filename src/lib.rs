@@ -1,4 +1,5 @@
 extern crate dht22_pi;
+extern crate rppal;
 
 mod observation;
 mod sensors;

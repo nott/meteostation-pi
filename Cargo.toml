@@ -5,3 +5,4 @@ authors = ["Stas Rudakou <stas@garage22.net>"]
 
 [dependencies]
 dht22_pi = "*"
+rppal = "*"
