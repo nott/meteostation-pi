@@ -27,6 +27,7 @@ pub enum DataErrorKind {
     Timeout,
     Integrity,
     IO,
+    Runtime,
 }
 
 impl DataErrorKind {

@@ -43,17 +43,18 @@ impl AsyncDhtSensor {
         control_channel: mpsc::Receiver<AsyncDhtSensorCommand>,
     ) {
         loop {
-            let mut observation_mut = observation.write().unwrap();
-            match dht22_pi::read(pin) {
-                Result::Ok(reading) => {
-                    (*observation_mut).add_data(DataValue::from_reading(&reading));
-                }
-                Result::Err(error) => {
-                    (*observation_mut).add_error(DataErrorKind::from_error(&error));
+            if let Result::Ok(mut observation_mut) = observation.write() {
+                match dht22_pi::read(pin) {
+                    Result::Ok(reading) => {
+                        (*observation_mut).add_data(DataValue::from_reading(&reading));
+                    }
+                    Result::Err(error) => {
+                        (*observation_mut).add_error(DataErrorKind::from_error(&error));
+                    }
                 }
             }
             match control_channel.recv_timeout(time::Duration::from_secs(10)) {
-                Result::Ok(_) => return,
+                Result::Ok(AsyncDhtSensorCommand::Stop) => return,
                 Result::Err(_) => (),
             }
         }
@@ -62,16 +63,12 @@ impl AsyncDhtSensor {
 
 impl Drop for AsyncDhtSensor {
     fn drop(&mut self) {
-        let handle = self.handle.take();
-        match handle {
-            Some(join_handler) => {
-                let handle_tx = self.handle_tx.lock().unwrap();
-                match (*handle_tx).send(AsyncDhtSensorCommand::Stop) {
-                    Result::Ok(()) => {join_handler.join().unwrap();}
-                    Result::Err(_) => (),
+        if let Some(join_handler) = self.handle.take() {
+            if let Result::Ok(handle_tx) = self.handle_tx.lock() {
+                if (*handle_tx).send(AsyncDhtSensorCommand::Stop).is_ok() {
+                    let _ = join_handler.join();
                 }
             }
-            None => (),
         }
     }
 }
