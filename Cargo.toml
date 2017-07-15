@@ -4,5 +4,6 @@ version = "0.1.0"
 authors = ["Stas Rudakou <stas@garage22.net>"]
 
 [dependencies]
-dht22_pi = "*"
-rppal = "*"
+dht22_pi = "0.1.0"
+hyper = "0.10.12"
+prometheus = "0.2.8"

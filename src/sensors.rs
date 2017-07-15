@@ -1,162 +1,137 @@
-use observation::Observation;
-pub use sensors::dht::DhtSensor;
+use std::panic;
 
+use dht22_pi;
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct DataPoint {
+    pub temperature: f64,
+    pub humidity: f64,
+}
+
+impl DataPoint {
+    pub fn new(temperature: f64, humidity: f64) -> Self {
+        DataPoint {
+            temperature: temperature,
+            humidity: humidity,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum ErrorKind {
+    Timeout,
+    Integrity,
+    IO,
+    Runtime,
+}
+
+/// A trait for measuring temperature and humididty
+///
+/// There is only one real world implementation (for GpioSensor), but
+/// we keep this trait separate to make the code more testable.
 pub trait Sensor {
-    fn get_observation(&self) -> Result<Observation, &'static str>;
+    /// Read temperature and humidity from sensor.
+    fn read(&self) -> Result<DataPoint, ErrorKind>;
 }
 
-mod dht {
-    use std::sync::{Arc, RwLock};
-    use std::time;
+/// DHT22 temperature and humidity sensor
+///
+/// The only real life struct implementing Sensor trait.
+pub struct GpioSensor {
+    pin: u8,
+}
 
-    use dht22_pi;
-
-    use observation::{DataErrorKind, DataValue, Observation};
-    use sensors::poller;
-
-    pub struct DhtSensor {
-        pub observation: Arc<RwLock<Observation>>,
-        pub pin: u8,
-        _poller: poller::Poller,
+impl GpioSensor {
+    /// Create a new DHT22 sensor instance.
+    pub fn new(pin: u8) -> Self {
+        GpioSensor { pin: pin }
     }
+}
 
-    impl DhtSensor {
-        pub fn new(pin: u8) -> Self {
-            let observation = Arc::new(RwLock::new(Observation::new()));
-
-            let update_fn = UpdateClosure::new(observation.clone(), pin);
-            let poller = poller::Poller::new(time::Duration::from_secs(10), update_fn);
-
-            DhtSensor {
-                observation: observation,
-                pin: pin,
-                _poller: poller,
-            }
-        }
-    }
-
-    struct UpdateClosure {
-        observation: Arc<RwLock<Observation>>,
-        pin: u8,
-    }
-
-    impl UpdateClosure {
-        pub fn new(observation: Arc<RwLock<Observation>>, pin: u8) -> Self {
-            UpdateClosure {
-                observation: observation.clone(),
-                pin: pin,
-            }
-        }
-
-        fn inner_call(&self) {
-            if let Result::Ok(mut observation_mut) = self.observation.write() {
-                match dht22_pi::read(self.pin) {
-                    Result::Ok(reading) => {
-                        (*observation_mut).add_data(DataValue::from_reading(&reading));
-                    }
-                    Result::Err(error) => {
-                        (*observation_mut).add_error(DataErrorKind::from_error(&error));
-                    }
+impl Sensor for GpioSensor {
+    fn read(&self) -> Result<DataPoint, ErrorKind> {
+        match panic::catch_unwind(|| dht22_pi::read(self.pin)) {
+            Result::Ok(dht_result) => {
+                match dht_result {
+                    Result::Ok(dht22_pi::Reading {
+                                   temperature: t,
+                                   humidity: h,
+                               }) => Result::Ok(DataPoint::new(t as f64, h as f64)),
+                    Result::Err(dht22_pi::ReadingError::Timeout) => Result::Err(ErrorKind::Timeout),
+                    Result::Err(dht22_pi::ReadingError::Checksum) => Result::Err(
+                        ErrorKind::Integrity,
+                    ),
+                    Result::Err(dht22_pi::ReadingError::Gpio(_)) => Result::Err(ErrorKind::IO),
                 }
             }
-        }
-    }
-
-    impl FnOnce<()> for UpdateClosure {
-        type Output = ();
-        extern "rust-call" fn call_once(self, args: ()) {
-            self.inner_call();
-        }
-    }
-
-    impl FnMut<()> for UpdateClosure {
-        extern "rust-call" fn call_mut(&mut self, args: ()) {
-            self.inner_call();
-        }
-    }
-
-    impl Fn<()> for UpdateClosure {
-        extern "rust-call" fn call(&self, args: ()) {
-            self.inner_call();
+            Result::Err(_) => Result::Err(ErrorKind::Runtime),
         }
     }
 }
 
-impl Sensor for DhtSensor {
-    fn get_observation(&self) -> Result<Observation, &'static str> {
-        match self.observation.read() {
-            Ok(value) => Ok(value.clone()),
-            Err(_) => Err("Sensor is poisoned"),
-        }
+/// Sensor that always returns a predefined value.
+///
+/// Only used for testing.
+pub struct OkSensor {
+    value: DataPoint,
+}
+
+impl OkSensor {
+    /// Create a new testing sensor instance.
+    pub fn new(temperature: f64, humidity: f64) -> Self {
+        OkSensor { value: DataPoint::new(temperature, humidity) }
     }
 }
 
-mod poller {
-    use std::sync::{Mutex, mpsc};
-    use std::time;
-    use std::thread;
-
-    enum Command {
-        Stop,
+impl Sensor for OkSensor {
+    fn read(&self) -> Result<DataPoint, ErrorKind> {
+        Result::Ok(self.value.clone())
     }
+}
 
-    pub struct Poller {
-        handle: Option<thread::JoinHandle<()>>,
-        handle_tx: Mutex<mpsc::Sender<Command>>,
+/// Sensor that always returns a predefined error.
+///
+/// Only used for testing.
+pub struct ErrSensor {
+    error: ErrorKind,
+}
+
+impl ErrSensor {
+    /// Create a new testing sensor instance.
+    pub fn new(error: ErrorKind) -> Self {
+        ErrSensor { error: error }
     }
+}
 
-    impl Poller {
-        pub fn new<F>(interval: time::Duration, f: F) -> Self
-        where
-            F: Fn() -> (),
-            F: Send + 'static,
-        {
-            let (tx, rx) = mpsc::channel::<Command>();
-            let handle = thread::spawn(move || Self::poll(interval, rx, f));
-            Poller {
-                handle: Some(handle),
-                handle_tx: Mutex::new(tx),
-            }
-        }
-
-        fn poll<F>(interval: time::Duration, control_channel: mpsc::Receiver<Command>, f: F)
-        where
-            F: Fn() -> (),
-            F: Send + 'static,
-        {
-            loop {
-                f();
-                match control_channel.recv_timeout(interval) {
-                    Result::Ok(Command::Stop) => return,
-                    Result::Err(_) => (),
-                }
-            }
-        }
-    }
-
-    impl Drop for Poller {
-        fn drop(&mut self) {
-            if let Some(join_handler) = self.handle.take() {
-                if let Result::Ok(handle_tx) = self.handle_tx.lock() {
-                    if (*handle_tx).send(Command::Stop).is_ok() {
-                        let _ = join_handler.join();
-                    }
-                }
-            }
-        }
+impl Sensor for ErrSensor {
+    fn read(&self) -> Result<DataPoint, ErrorKind> {
+        Result::Err(self.error.clone())
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use sensors::dht::DhtSensor;
-    use Sensor;
+    use sensors::{ErrorKind, ErrSensor, GpioSensor, OkSensor, Sensor};
 
     #[test]
-    fn new_sensor_is_readable() {
-        let pin = 0;
-        let sensor = DhtSensor::new(pin);
-        let observation = sensor.get_observation();
-        assert!(observation.is_ok());
+    fn gpiosensor_smoke() {
+        let test_pin = 255;
+        let sensor = GpioSensor::new(test_pin);
+        assert!(sensor.read().is_err());
+    }
+
+    #[test]
+    fn oksensor_smoke() {
+        let temperature = 24.0;
+        let humidity = 55.1;
+        let sensor = OkSensor::new(temperature, humidity);
+        assert!(sensor.read().is_ok());
+    }
+
+    #[test]
+    fn errsensor_smoke() {
+        let error = ErrorKind::Integrity;
+        let sensor = ErrSensor::new(error.clone());
+        assert_eq!(sensor.read(), Result::Err(error));
     }
 }
