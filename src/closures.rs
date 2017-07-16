@@ -6,7 +6,10 @@ pub struct UpdateClosure<S> {
     metrics: Metrics,
 }
 
-impl<S> UpdateClosure<S> where S: Sensor {
+impl<S> UpdateClosure<S>
+where
+    S: Sensor,
+{
     pub fn new(sensor: S, metrics: Metrics) -> Self {
         UpdateClosure {
             sensor: sensor,
@@ -16,7 +19,10 @@ impl<S> UpdateClosure<S> where S: Sensor {
 
     fn inner_call(&self) {
         match self.sensor.read() {
-            Result::Ok(DataPoint { temperature: t, humidity: h}) => {
+            Result::Ok(DataPoint {
+                           temperature: t,
+                           humidity: h,
+                       }) => {
                 self.metrics.set_value(t, h);
             }
             Result::Err(_) => {
@@ -26,7 +32,10 @@ impl<S> UpdateClosure<S> where S: Sensor {
     }
 }
 
-impl<S> FnOnce<()> for UpdateClosure<S> where S: Sensor {
+impl<S> FnOnce<()> for UpdateClosure<S>
+where
+    S: Sensor,
+{
     type Output = ();
     #[allow(unused_variables)]
     extern "rust-call" fn call_once(self, args: ()) {
@@ -34,14 +43,20 @@ impl<S> FnOnce<()> for UpdateClosure<S> where S: Sensor {
     }
 }
 
-impl<S> FnMut<()> for UpdateClosure<S> where S: Sensor {
+impl<S> FnMut<()> for UpdateClosure<S>
+where
+    S: Sensor,
+{
     #[allow(unused_variables)]
     extern "rust-call" fn call_mut(&mut self, args: ()) {
         self.inner_call();
     }
 }
 
-impl<S> Fn<()> for UpdateClosure<S> where S: Sensor {
+impl<S> Fn<()> for UpdateClosure<S>
+where
+    S: Sensor,
+{
     #[allow(unused_variables)]
     extern "rust-call" fn call(&self, args: ()) {
         self.inner_call();
