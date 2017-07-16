@@ -51,6 +51,22 @@ impl Metrics {
         self.error_count.inc();
         self.ok_count.set(0.0);
     }
+
+    pub fn get_temperature(&self) -> f64 {
+        self.temperature.get()
+    }
+
+    pub fn get_humidity(&self) -> f64 {
+        self.humidity.get()
+    }
+
+    pub fn get_ok_count(&self) -> f64 {
+        self.ok_count.get()
+    }
+
+    pub fn get_error_count(&self) -> f64 {
+        self.error_count.get()
+    }
 }
 
 pub struct Core {
