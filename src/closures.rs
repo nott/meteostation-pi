@@ -129,7 +129,9 @@ mod tests {
         // given a sensor with predefined results sequence
         let mut results = Vec::new();
         results.push(Result::Err(ErrorKind::IO));
-        results.push(Result::Ok(DataPoint::new(TEST_TEMPERATURE - 1.0, TEST_HUMIDITY - 1.0)));
+        results.push(Result::Ok(
+            DataPoint::new(TEST_TEMPERATURE - 1.0, TEST_HUMIDITY - 1.0),
+        ));
         results.push(Result::Ok(DataPoint::new(TEST_TEMPERATURE, TEST_HUMIDITY)));
         results.push(Result::Err(ErrorKind::Integrity));
         let sensor = SequenceSensor::new(results);

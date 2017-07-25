@@ -6,4 +6,5 @@ authors = ["Stas Rudakou <stas@garage22.net>"]
 [dependencies]
 dht22_pi = "0.1.0"
 hyper = "0.10.12"
+lazy_static = "0.2"
 prometheus = "0.2.8"
