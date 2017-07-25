@@ -13,6 +13,6 @@ fn main() {
     let core = Core::new();
     let sensor = GpioSensor::new(4);
     let fn_update = UpdateClosure::new(sensor, core.get_metrics());
-    Poller::new(time::Duration::from_secs(10), fn_update);
+    let _poller = Poller::new(time::Duration::from_secs(10), fn_update);
     web::server(core);
 }
