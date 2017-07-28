@@ -21,12 +21,14 @@ lazy_static! {
 
 pub fn server(core: core::Core) {
     let addr = "127.0.0.1:9898";
+    info!("Listening {}", &addr);
     Server::http(addr)
         .unwrap()
-        .handle(move |_: Request, mut res: Response| {
+        .handle(move |request: Request, mut res: Response| {
             let metrics = core.to_string();
             res.headers_mut().set(ContentType(PROMETHEUS_MIME.clone()));
             res.send(&metrics.as_bytes()).unwrap();
+            info!("HTTP {} {}", &request.method, &request.uri);
         })
         .unwrap();
 }

@@ -4,6 +4,8 @@ extern crate dht22_pi;
 extern crate hyper;
 #[macro_use]
 extern crate lazy_static;
+#[macro_use]
+extern crate log;
 extern crate prometheus;
 
 pub mod closures;

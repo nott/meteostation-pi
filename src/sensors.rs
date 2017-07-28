@@ -1,5 +1,6 @@
 use std::panic;
 use std::cell::Cell;
+use std::fmt;
 use std::vec::Vec;
 
 use dht22_pi;
@@ -25,6 +26,18 @@ pub enum ErrorKind {
     Integrity,
     IO,
     Runtime,
+}
+
+impl fmt::Display for ErrorKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let kind_str = match self {
+            &ErrorKind::Timeout => "timeout",
+            &ErrorKind::Integrity => "integrity",
+            &ErrorKind::IO => "io",
+            &ErrorKind::Runtime => "runtime"
+        };
+        write!(f, "{}", kind_str)
+    }
 }
 
 /// A trait for measuring temperature and humididty

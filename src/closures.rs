@@ -23,9 +23,11 @@ where
                            temperature: t,
                            humidity: h,
                        }) => {
+                info!("Sensor: t={}, humidity={}", t, h);
                 self.metrics.set_value(t, h);
             }
-            Result::Err(_) => {
+            Result::Err(err) => {
+                warn!("Sensor: error={}", err);
                 self.metrics.set_error();
             }
         }
